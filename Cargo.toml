@@ -1,0 +1,12 @@
+[package]
+name = "rshred"
+version = "0.1.0"
+authors = ["Alexey Zinchenko <alexey.zinchenko@protonmail.com>"]
+edition = "2018"
+repository = "https://github.com/Prominence/rshred"
+license-file = "LICENSE"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+clap = "2.33.3"
