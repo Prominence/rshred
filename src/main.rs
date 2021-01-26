@@ -1,12 +1,15 @@
 extern crate clap;
-use clap::{App, Arg};
-use std::fs;
-use std::process::exit;
+
+use clap::{App, Arg, crate_authors, crate_name, crate_version};
+
+use crate::shred::{Shredder, Verbosity};
+
+mod shred;
 
 fn main() {
-    let params = App::new("shred")
-        .version("0.1.0")
-        .author("Alexey Zinchenko <alexey.zinchenko@protonmail.com>")
+    let params = App::new(crate_name!())
+        .version(crate_version!())
+        .author(crate_authors!())
         .about("TODO")
         .arg(Arg::with_name("PATH")
             .help("Sets the path of file or directory to use")
@@ -39,27 +42,11 @@ fn main() {
     // Calling .unwrap() is safe here because "INPUT" is required (if "INPUT" wasn't
     // required we could have used an 'if let' to conditionally get the value)
     let path = params.value_of("PATH").unwrap();
-    match fs::metadata(path) {
-        Ok(metadata) => {
-            println!("Exists: OK");
-            println!("Is directory: {}", metadata.is_dir());
-            println!("Is file: {}", metadata.is_file());
-            println!("Is recursively: {}", is_recursively);
-            println!("Is interactive: {}", is_interactive);
-            println!("Verbosity: {:?}", verbosity);
-        }
-        Err(_) => {
-            println!("Provided path is invalid!");
-            exit(1);
-        }
-    }
-    println!("Using input file: {}", path);
-}
 
-#[derive(Debug)]
-enum Verbosity {
-    None,
-    Low,
-    Average,
-    High
+    Shredder::new(
+        path.to_string(),
+        is_recursively,
+        is_interactive,
+        verbosity
+    ).run();
 }

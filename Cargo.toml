@@ -10,3 +10,4 @@ license-file = "LICENSE"
 
 [dependencies]
 clap = "2.33.3"
+rand = "0.8.3"
