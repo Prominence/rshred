@@ -1,9 +1,11 @@
 use std::cmp::Ordering;
 use std::fs;
 use std::fs::File;
-use std::io::{BufWriter, Write, Seek, SeekFrom};
+use std::io::{BufWriter, Seek, SeekFrom, Write};
 use std::io;
 use std::process::exit;
+
+use walkdir::WalkDir;
 
 pub struct Shredder {
     options: ShredOptions,
@@ -18,7 +20,7 @@ impl Shredder {
 
     pub fn run(&self) {
         let verbosity = &self.options.verbosity;
-        let metadata_result = fs::metadata(&self.options.path);
+        let metadata_result = fs::metadata(&self.options.raw_path);
         match &metadata_result {
             Ok(metadata) => {
                 if *verbosity >= Verbosity::Average {
@@ -37,33 +39,29 @@ impl Shredder {
             }
         }
         if *verbosity > Verbosity::None {
-            println!("Using input file: {}", &self.options.path);
+            println!("Using input file: {}", &self.options.raw_path);
         }
 
         if metadata_result.unwrap().is_file() {
-            Shredder::shred_file(&self.options);
+            Shredder::shred_file(&self.options, &self.options.raw_path);
         } else if self.options.is_recursive {
-
+            Shredder::shred_dir(&self.options, &self.options.raw_path);
         } else {
             println!("Target is a directory!");
             exit(1);
         }
     }
 
-    fn shred_file(options: &ShredOptions) {
-        match std::fs::canonicalize(&options.path) {
+    fn shred_file(options: &ShredOptions, path: &str) {
+        if options.verbosity > Verbosity::Low {
+            println!("Trying to shred {}", path);
+        }
+        match std::fs::canonicalize(path) {
             Ok(path) => {
                 let file_length = path.metadata().unwrap().len();
                 let absolute_path = path.to_str().unwrap();
                 if options.is_interactive {
-                    print!("Do you really want to shred '{}'? [Y/n] ", absolute_path);
-                    io::stdout().flush().unwrap();
-
-                    let mut input = String::new();
-                    io::stdin().read_line(&mut input).expect("Failed to read input.");
-                    let input = input.trim();
-
-                    if input.len() != 1 || !input.to_lowercase().eq("y") {
+                    if !Shredder::user_prompt(absolute_path) {
                         return;
                     }
                 }
@@ -98,6 +96,33 @@ impl Shredder {
             }
         }
     }
+
+    fn shred_dir(options: &ShredOptions, dir: &str) {
+        let mut files_count = 0;
+        for entry in WalkDir::new(dir).into_iter().filter_map(|e| e.ok()) {
+            if entry.metadata().unwrap().is_file() {
+                Shredder::shred_file(options, entry.path().to_str().unwrap());
+                files_count = files_count + 1;
+            }
+        }
+        if options.verbosity != Verbosity::None {
+            println!("Processed {} files.", files_count);
+        }
+    }
+
+    fn user_prompt(path: &str) -> bool {
+        print!("Do you really want to shred '{}'? [Y/n] ", absolute_path);
+        io::stdout().flush().unwrap();
+
+        let mut input = String::new();
+        io::stdin().read_line(&mut input).expect("Failed to read input.");
+        let input = input.trim();
+
+        if input.len() != 1 || !input.to_lowercase().eq("y") {
+            return false;
+        }
+        true
+    }
 }
 
 pub struct ShredOptions {
@@ -106,13 +131,13 @@ pub struct ShredOptions {
     is_interactive: bool,
     rewrite_iterations: u8,
     keep_files: bool,
-    path: String,
+    raw_path: String,
 }
 
 impl ShredOptions {
     pub fn new(path: String) -> ShredOptions {
         ShredOptions {
-            path,
+            raw_path: path,
             is_interactive: true,
             is_recursive: false,
             rewrite_iterations: 3,
@@ -156,7 +181,7 @@ pub enum Verbosity {
     None,
     Low,
     Average,
-    High
+    High,
 }
 
 impl Verbosity {
