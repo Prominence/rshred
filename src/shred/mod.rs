@@ -111,7 +111,7 @@ impl Shredder {
     }
 
     fn user_prompt(path: &str) -> bool {
-        print!("Do you really want to shred '{}'? [Y/n] ", absolute_path);
+        print!("Do you really want to shred '{}'? [Y/n] ", path);
         io::stdout().flush().unwrap();
 
         let mut input = String::new();
