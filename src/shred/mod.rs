@@ -212,3 +212,17 @@ impl PartialEq for Verbosity {
         self.discriminant() == other.discriminant()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::shred::Verbosity;
+
+    #[test]
+    fn verbosity_check() {
+        assert_eq!(Verbosity::None, Verbosity::None);
+        assert!(Verbosity::None < Verbosity::Low, true);
+        assert!(Verbosity::Low < Verbosity::Average, true);
+        assert!(Verbosity::Average < Verbosity::High, true);
+        assert!(Verbosity::None < Verbosity::High, true);
+    }
+}
