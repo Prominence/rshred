@@ -68,7 +68,9 @@ impl Shredder {
 
                 match File::create(absolute_path) {
                     Ok(file) => {
-                        println!("File's size: {}", file_length);
+                        if options.verbosity > Verbosity::Low {
+                            println!("File's size: {}", file_length);
+                        }
                         let mut buffer = BufWriter::new(&file);
 
                         for _ in 0..options.rewrite_iterations {
@@ -215,7 +217,7 @@ impl PartialEq for Verbosity {
 
 #[cfg(test)]
 mod tests {
-    use crate::shred::Verbosity;
+    use crate::Verbosity;
 
     #[test]
     fn verbosity_check() {

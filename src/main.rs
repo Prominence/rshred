@@ -2,11 +2,9 @@ extern crate clap;
 
 use clap::{App, Arg, crate_authors, crate_name, crate_version};
 
-use crate::shred::{Shredder, Verbosity, ShredOptions};
 use std::process::exit;
 use std::str::FromStr;
-
-mod shred;
+use rshred::{Verbosity, Shredder, ShredOptions};
 
 fn main() {
     let params = App::new(crate_name!())
