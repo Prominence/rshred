@@ -7,6 +7,8 @@ use std::process::exit;
 
 use walkdir::WalkDir;
 
+const BATCH_SIZE: usize = 8192;
+
 pub struct Shredder {
     options: ShredOptions,
 }
@@ -74,10 +76,22 @@ impl Shredder {
                         let mut buffer = BufWriter::new(&file);
 
                         for _ in 0..options.rewrite_iterations {
-                            let random_bytes: Vec<u8> = (0..file_length).map(|_| {
-                                rand::random::<u8>()
-                            }).collect();
-                            buffer.write(&random_bytes).unwrap();
+                            let mut bytes_processed = 0;
+
+                            while bytes_processed < file_length {
+                                let bytes_to_write = if file_length - bytes_processed > BATCH_SIZE as u64 {
+                                    BATCH_SIZE
+                                } else {
+                                    (file_length - bytes_processed) as usize
+                                };
+
+                                let random_bytes: Vec<u8> = (0..bytes_to_write).map(|_| {
+                                    rand::random::<u8>()
+                                }).collect();
+                                buffer.write(&random_bytes).unwrap();
+
+                                bytes_processed = bytes_processed + bytes_to_write as u64;
+                            }
 
                             buffer.flush().unwrap();
                             file.sync_all().unwrap();
