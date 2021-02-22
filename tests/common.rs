@@ -25,13 +25,6 @@ pub fn setup(data_type: TestDataType) -> EnvironmentDetails {
 
             EnvironmentDetails::single(tmp_file_path)
         }
-        TestDataType::SingleFile(filename) => {
-            let tmp_file_path = format!("{}/{}", TEST_DIR, filename);
-
-            prepare_file(&tmp_file_path);
-
-            EnvironmentDetails::single(tmp_file_path)
-        }
         TestDataType::MultipleFiles(files) => {
             let files = files.iter().map(|file| format!("{}/{}", TEST_DIR, file)).collect::<Vec<String>>();
             for file in files.iter() {
@@ -98,6 +91,5 @@ impl EnvironmentDetails {
 
 pub enum TestDataType {
     RandomSingleFile,
-    SingleFile(String),
     MultipleFiles(Vec<String>),
 }

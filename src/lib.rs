@@ -6,6 +6,7 @@ use std::io;
 use std::process::exit;
 
 use walkdir::WalkDir;
+use indicatif::{ProgressBar, ProgressStyle};
 
 const BATCH_SIZE: usize = 8192;
 
@@ -40,7 +41,7 @@ impl Shredder {
                 exit(1);
             }
         }
-        if *verbosity > Verbosity::None {
+        if *verbosity > Verbosity::Low {
             println!("Using input file: {}", &self.options.raw_path);
         }
 
@@ -54,17 +55,17 @@ impl Shredder {
         }
     }
 
-    fn shred_file(options: &ShredOptions, path: &str) {
+    fn shred_file(options: &ShredOptions, path: &str) -> bool {
         if options.verbosity > Verbosity::Low {
             println!("Trying to shred {}", path);
         }
-        match std::fs::canonicalize(path) {
+        return match std::fs::canonicalize(path) {
             Ok(path) => {
                 let file_length = path.metadata().unwrap().len();
                 let absolute_path = path.to_str().unwrap();
                 if options.is_interactive {
                     if !Shredder::user_prompt(absolute_path) {
-                        return;
+                        return false;
                     }
                 }
 
@@ -75,8 +76,16 @@ impl Shredder {
                         }
                         let mut buffer = BufWriter::new(&file);
 
-                        for _ in 0..options.rewrite_iterations {
+                        println!("{}", absolute_path);
+                        for iteration in 0..options.rewrite_iterations {
                             let mut bytes_processed = 0;
+
+                            let pb = ProgressBar::new(file_length);
+                            pb.set_prefix(&format!("Iteration #{}", iteration + 1));
+                            pb.set_message(absolute_path);
+                            pb.set_style(ProgressStyle::default_bar()
+                                .template("{prefix} {spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} {bytes_per_sec} ({eta})")
+                                .progress_chars("#>-"));
 
                             while bytes_processed < file_length {
                                 let bytes_to_write = if file_length - bytes_processed > BATCH_SIZE as u64 {
@@ -91,7 +100,10 @@ impl Shredder {
                                 buffer.write(&random_bytes).unwrap();
 
                                 bytes_processed = bytes_processed + bytes_to_write as u64;
+
+                                pb.set_position(bytes_processed);
                             }
+                            pb.finish_with_message("shredded");
 
                             buffer.flush().unwrap();
                             file.sync_all().unwrap();
@@ -101,14 +113,20 @@ impl Shredder {
                         if !options.keep_files {
                             fs::remove_file(absolute_path).unwrap();
                         }
+                        if options.verbosity > Verbosity::None {
+                            println!("File '{}' shredded!", absolute_path);
+                        }
+                        true
                     }
                     Err(error) => {
                         println!("{}", error);
+                        false
                     }
                 }
             }
             Err(error) => {
                 println!("{}", error);
+                false
             }
         }
     }
@@ -117,8 +135,9 @@ impl Shredder {
         let mut files_count = 0;
         for entry in WalkDir::new(dir).into_iter().filter_map(|e| e.ok()) {
             if entry.metadata().unwrap().is_file() {
-                Shredder::shred_file(options, entry.path().to_str().unwrap());
-                files_count = files_count + 1;
+                if Shredder::shred_file(options, entry.path().to_str().unwrap()) {
+                    files_count = files_count + 1;
+                }
             }
         }
         if options.verbosity != Verbosity::None {
