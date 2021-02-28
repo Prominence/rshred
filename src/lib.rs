@@ -1,69 +1,71 @@
 use std::cmp::Ordering;
 use std::fs;
-use std::fs::File;
+use std::fs::{File, Metadata};
 use std::io::{BufWriter, Seek, SeekFrom, Write};
 use std::io;
 use std::process::exit;
 
 use walkdir::WalkDir;
 use indicatif::{ProgressBar, ProgressStyle};
+use std::fmt::{Display, Formatter, Result};
 
 const BATCH_SIZE: usize = 8192;
 
-pub struct Shredder {
-    options: ShredOptions,
+pub struct Shredder<'a> {
+    configuration: ShredConfiguration<'a>,
 }
 
-impl Shredder {
-    pub fn with_options(options: ShredOptions) -> Shredder {
+impl <'a>Shredder<'a> {
+    pub fn with_options(configuration: ShredConfiguration<'a>) -> Shredder<'a> {
         Shredder {
-            options
+            configuration
         }
     }
 
     pub fn run(&self) {
-        let verbosity = &self.options.verbosity;
-        let metadata_result = fs::metadata(&self.options.raw_path);
-        match &metadata_result {
-            Ok(metadata) => {
-                if *verbosity >= Verbosity::Average {
-                    println!("Is directory: {}", metadata.is_dir());
-                    println!("Is file: {}", metadata.is_file());
-                    if *verbosity == Verbosity::High {
-                        println!("Is recursively: {}", self.options.is_recursive);
-                        println!("Is interactive: {}", self.options.is_interactive);
-                        println!("Verbosity: {:?}", &self.options.verbosity);
-                    }
-                }
-            }
-            Err(_) => {
-                println!("No such file or directory.");
+        let configuration = &self.configuration;
+        let verbosity = &configuration.verbosity;
+
+        let metadata_result = fs::metadata(&configuration.raw_path);
+        if let Err(_) = metadata_result {
+            println!("No such file or directory.");
+            exit(1);
+        }
+        let metadata = metadata_result.unwrap();
+
+        if verbosity == &Verbosity::High {
+            println!("{}", configuration);
+        }
+        if verbosity == &Verbosity::Low {
+            println!("Using input file: {}", &configuration.raw_path);
+        }
+        if verbosity >= &Verbosity::Average {
+            println!("Is directory: {}", metadata.is_dir());
+            println!("Is file: {}", metadata.is_file());
+        }
+
+
+        if metadata.is_file() {
+            Shredder::run_file_shredding(&configuration, &configuration.raw_path, metadata);
+        } else {
+            if self.configuration.is_recursive {
+                Shredder::run_directory_shredding(&configuration, &configuration.raw_path);
+            } else {
+                println!("Target is a directory!");
                 exit(1);
             }
         }
-        if *verbosity > Verbosity::Low {
-            println!("Using input file: {}", &self.options.raw_path);
-        }
-
-        if metadata_result.unwrap().is_file() {
-            Shredder::shred_file(&self.options, &self.options.raw_path);
-        } else if self.options.is_recursive {
-            Shredder::shred_dir(&self.options, &self.options.raw_path);
-        } else {
-            println!("Target is a directory!");
-            exit(1);
-        }
     }
 
-    fn shred_file(options: &ShredOptions, path: &str) -> bool {
-        if options.verbosity > Verbosity::Low {
-            println!("Trying to shred {}", path);
+    fn run_file_shredding(configuration: &ShredConfiguration, relative_path: &str, metadata: Metadata) -> bool {
+        if configuration.verbosity > Verbosity::Low {
+            println!("Trying to shred {}", relative_path);
         }
-        return match std::fs::canonicalize(path) {
+        return match std::fs::canonicalize(relative_path) {
             Ok(path) => {
-                let file_length = path.metadata().unwrap().len();
+                let file_length = metadata.len();
                 let absolute_path = path.to_str().unwrap();
-                if options.is_interactive {
+                if configuration.is_interactive {
                     if !Shredder::user_prompt(absolute_path) {
                         return false;
                     }
@@ -71,49 +73,19 @@ impl Shredder {
 
                 match File::create(absolute_path) {
                     Ok(file) => {
-                        if options.verbosity > Verbosity::Low {
+                        if configuration.verbosity > Verbosity::Low {
                             println!("File's size: {}", file_length);
                         }
-                        let mut buffer = BufWriter::new(&file);
 
                         println!("{}", absolute_path);
-                        for iteration in 0..options.rewrite_iterations {
-                            let mut bytes_processed = 0;
-
-                            let pb = ProgressBar::new(file_length);
-                            pb.set_prefix(&format!("Iteration #{}", iteration + 1));
-                            pb.set_message(absolute_path);
-                            pb.set_style(ProgressStyle::default_bar()
-                                .template("{prefix} {spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} {bytes_per_sec} ({eta})")
-                                .progress_chars("#>-"));
-
-                            while bytes_processed < file_length {
-                                let bytes_to_write = if file_length - bytes_processed > BATCH_SIZE as u64 {
-                                    BATCH_SIZE
-                                } else {
-                                    (file_length - bytes_processed) as usize
-                                };
-
-                                let random_bytes: Vec<u8> = (0..bytes_to_write).map(|_| {
-                                    rand::random::<u8>()
-                                }).collect();
-                                buffer.write(&random_bytes).unwrap();
-
-                                bytes_processed = bytes_processed + bytes_to_write as u64;
-
-                                pb.set_position(bytes_processed);
-                            }
-                            pb.finish_with_message("shredded");
-
-                            buffer.flush().unwrap();
-                            file.sync_all().unwrap();
-                            buffer.seek(SeekFrom::Start(0)).unwrap();
+                        for iteration in 0..configuration.rewrite_iterations {
+                            <Shredder<'a>>::shred_file(&file, file_length, absolute_path, &iteration);
                         }
 
-                        if !options.keep_files {
+                        if !configuration.keep_files {
                             fs::remove_file(absolute_path).unwrap();
                         }
-                        if options.verbosity > Verbosity::None {
+                        if configuration.verbosity > Verbosity::None {
                             println!("File '{}' shredded!", absolute_path);
                         }
                         true
@@ -131,16 +103,52 @@ impl Shredder {
         }
     }
 
-    fn shred_dir(options: &ShredOptions, dir: &str) {
+    fn shred_file(file: &File, file_length: u64, absolute_path: &str, iteration: &u8) {
+        let mut buffer = BufWriter::new(file);
+
+        let mut bytes_processed = 0;
+
+        let pb = ProgressBar::new(file_length);
+        pb.set_prefix(&format!("Iteration #{}", iteration + 1));
+        pb.set_message(absolute_path);
+        pb.set_style(ProgressStyle::default_bar()
+            .template("{prefix} {spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} {bytes_per_sec} ({eta})")
+            .progress_chars("#>-"));
+
+        while bytes_processed < file_length {
+            let bytes_to_write = if file_length - bytes_processed > BATCH_SIZE as u64 {
+                BATCH_SIZE
+            } else {
+                (file_length - bytes_processed) as usize
+            };
+
+            let random_bytes: Vec<u8> = (0..bytes_to_write).map(|_| {
+                rand::random::<u8>()
+            }).collect();
+            buffer.write(&random_bytes).unwrap();
+
+            bytes_processed = bytes_processed + bytes_to_write as u64;
+
+            pb.set_position(bytes_processed);
+        }
+        pb.finish_with_message("shredded");
+
+        buffer.flush().unwrap();
+        file.sync_all().unwrap();
+        buffer.seek(SeekFrom::Start(0)).unwrap();
+    }
+
+    fn run_directory_shredding(configuration: &ShredConfiguration, relative_path: &str) {
         let mut files_count = 0;
-        for entry in WalkDir::new(dir).into_iter().filter_map(|e| e.ok()) {
+        for entry in WalkDir::new(relative_path).into_iter().filter_map(|e| e.ok()) {
             if entry.metadata().unwrap().is_file() {
-                if Shredder::shred_file(options, entry.path().to_str().unwrap()) {
+                let file_path = entry.path().to_str().unwrap();
+                if Shredder::run_file_shredding(configuration, file_path, fs::metadata(file_path).unwrap()) {
                     files_count = files_count + 1;
                 }
             }
         }
-        if options.verbosity != Verbosity::None {
+        if configuration.verbosity != Verbosity::None {
             println!("Processed {} files.", files_count);
         }
     }
@@ -160,18 +168,18 @@ impl Shredder {
     }
 }
 
-pub struct ShredOptions {
+pub struct ShredConfiguration<'a> {
     verbosity: Verbosity,
     is_recursive: bool,
     is_interactive: bool,
     rewrite_iterations: u8,
     keep_files: bool,
-    raw_path: String,
+    raw_path: &'a str,
 }
 
-impl ShredOptions {
-    pub fn new(path: String) -> ShredOptions {
-        ShredOptions {
+impl<'a> ShredConfiguration<'a> {
+    pub fn new(path: &'a str) -> ShredConfiguration<'a> {
+        ShredConfiguration {
             raw_path: path,
             is_interactive: true,
             is_recursive: false,
@@ -181,33 +189,47 @@ impl ShredOptions {
         }
     }
 
-    pub fn set_verbosity(mut self, verbosity: Verbosity) -> ShredOptions {
+    pub fn set_verbosity(mut self, verbosity: Verbosity) -> ShredConfiguration<'a> {
         self.verbosity = verbosity;
         self
     }
 
-    pub fn set_is_recursive(mut self, is_recursive: bool) -> ShredOptions {
+    pub fn set_is_recursive(mut self, is_recursive: bool) -> ShredConfiguration<'a> {
         self.is_recursive = is_recursive;
         self
     }
 
-    pub fn set_is_interactive(mut self, is_interactive: bool) -> ShredOptions {
+    pub fn set_is_interactive(mut self, is_interactive: bool) -> ShredConfiguration<'a> {
         self.is_interactive = is_interactive;
         self
     }
 
-    pub fn set_keep_files(mut self, is_keep_files: bool) -> ShredOptions {
+    pub fn set_keep_files(mut self, is_keep_files: bool) -> ShredConfiguration<'a> {
         self.keep_files = is_keep_files;
         self
     }
 
-    pub fn set_rewrite_iterations(mut self, count: u8) -> ShredOptions {
+    pub fn set_rewrite_iterations(mut self, count: u8) -> ShredConfiguration<'a> {
         self.rewrite_iterations = count;
         self
     }
 
-    pub fn build(self) -> ShredOptions {
+    pub fn build(self) -> ShredConfiguration<'a> {
         self
+    }
+}
+
+impl<'a> Display for ShredConfiguration<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        writeln!(f, "Shredding configuration:")?;
+        writeln!(f, "{}", format!("Verbosity: {}", self.verbosity))?;
+        writeln!(f, "{}", format!("Is recursive: {}", self.is_recursive))?;
+        writeln!(f, "{}", format!("Is interactive: {}", self.is_interactive))?;
+        writeln!(f, "{}", format!("Rewrite iterations: {}", self.rewrite_iterations))?;
+        writeln!(f, "{}", format!("Keep files: {}", self.keep_files))?;
+        writeln!(f, "{}", format!("Path: {}", self.raw_path))?;
+
+        Ok(())
     }
 }
 
@@ -245,6 +267,27 @@ impl PartialOrd for Verbosity {
 impl PartialEq for Verbosity {
     fn eq(&self, other: &Self) -> bool {
         self.discriminant() == other.discriminant()
+    }
+}
+
+impl Display for Verbosity {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        let string_value = match self {
+            Verbosity::None => {
+                "None"
+            }
+            Verbosity::Low => {
+                "Low"
+            }
+            Verbosity::Average => {
+                "Average"
+            }
+            Verbosity::High => {
+                "High"
+            }
+        };
+        write!(f, "{}", string_value)?;
+        Ok(())
     }
 }
 

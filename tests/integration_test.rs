@@ -11,7 +11,7 @@ fn shredding_without_file_deletion() {
     let env_details = common::setup(common::TestDataType::RandomSingleFile);
     match &env_details {
         common::EnvironmentDetails::Single(filename) => {
-            let options = rshred::ShredOptions::new(filename.to_owned())
+            let options = rshred::ShredConfiguration::new(filename)
                 .set_verbosity(rshred::Verbosity::None)
                 .set_is_interactive(false)
                 .set_keep_files(true)
@@ -35,7 +35,7 @@ fn shredding_with_file_deletion() {
     let env_details = common::setup(common::TestDataType::RandomSingleFile);
     match &env_details {
         common::EnvironmentDetails::Single(filename) => {
-            let options = rshred::ShredOptions::new(filename.to_owned())
+            let options = rshred::ShredConfiguration::new(filename)
                 .set_verbosity(rshred::Verbosity::None)
                 .set_is_interactive(false)
                 .set_keep_files(false)
@@ -78,7 +78,8 @@ fn shredding_directory_recursively() {
             unreachable!()
         }
         common::EnvironmentDetails::Multiple(files) => {
-            let options = rshred::ShredOptions::new(format!("{}/{}", common::TEST_DIR, "test3"))
+            let test_path = format!("{}/{}", common::TEST_DIR, "test3");
+            let options = rshred::ShredConfiguration::new(&test_path)
                 .set_verbosity(rshred::Verbosity::None)
                 .set_is_interactive(false)
                 .set_is_recursive(true)
