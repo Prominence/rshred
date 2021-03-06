@@ -1,13 +1,13 @@
 use std::cmp::Ordering;
 use std::fs;
 use std::fs::{File, Metadata};
-use std::io::{BufWriter, Seek, SeekFrom, Write};
 use std::io;
+use std::io::{BufWriter, Seek, SeekFrom, Write};
 use std::process::exit;
 
-use walkdir::WalkDir;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::fmt::{Display, Formatter, Result};
+use walkdir::WalkDir;
 
 const BATCH_SIZE: usize = 8192;
 
@@ -15,11 +15,9 @@ pub struct Shredder<'a> {
     configuration: ShredConfiguration<'a>,
 }
 
-impl <'a>Shredder<'a> {
+impl<'a> Shredder<'a> {
     pub fn with_options(configuration: ShredConfiguration<'a>) -> Shredder<'a> {
-        Shredder {
-            configuration
-        }
+        Shredder { configuration }
     }
 
     pub fn run(&self) {
@@ -44,7 +42,6 @@ impl <'a>Shredder<'a> {
             println!("Is file: {}", metadata.is_file());
         }
 
-
         if metadata.is_file() {
             Shredder::run_file_shredding(&configuration, &configuration.raw_path, metadata);
         } else {
@@ -57,7 +54,11 @@ impl <'a>Shredder<'a> {
         }
     }
 
-    fn run_file_shredding(configuration: &ShredConfiguration, relative_path: &str, metadata: Metadata) -> bool {
+    fn run_file_shredding(
+        configuration: &ShredConfiguration,
+        relative_path: &str,
+        metadata: Metadata,
+    ) -> bool {
         if configuration.verbosity > Verbosity::Low {
             println!("Trying to shred {}", relative_path);
         }
@@ -79,7 +80,12 @@ impl <'a>Shredder<'a> {
 
                         println!("{}", absolute_path);
                         for iteration in 0..configuration.rewrite_iterations {
-                            <Shredder<'a>>::shred_file(&file, file_length, absolute_path, &iteration);
+                            <Shredder<'a>>::shred_file(
+                                &file,
+                                file_length,
+                                absolute_path,
+                                &iteration,
+                            );
                         }
 
                         if !configuration.keep_files {
@@ -100,7 +106,7 @@ impl <'a>Shredder<'a> {
                 println!("{}", error);
                 false
             }
-        }
+        };
     }
 
     fn shred_file(file: &File, file_length: u64, absolute_path: &str, iteration: &u8) {
@@ -122,9 +128,7 @@ impl <'a>Shredder<'a> {
                 (file_length - bytes_processed) as usize
             };
 
-            let random_bytes: Vec<u8> = (0..bytes_to_write).map(|_| {
-                rand::random::<u8>()
-            }).collect();
+            let random_bytes: Vec<u8> = (0..bytes_to_write).map(|_| rand::random::<u8>()).collect();
             buffer.write(&random_bytes).unwrap();
 
             bytes_processed = bytes_processed + bytes_to_write as u64;
@@ -140,10 +144,17 @@ impl <'a>Shredder<'a> {
 
     fn run_directory_shredding(configuration: &ShredConfiguration, relative_path: &str) {
         let mut files_count = 0;
-        for entry in WalkDir::new(relative_path).into_iter().filter_map(|e| e.ok()) {
+        for entry in WalkDir::new(relative_path)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
             if entry.metadata().unwrap().is_file() {
                 let file_path = entry.path().to_str().unwrap();
-                if Shredder::run_file_shredding(configuration, file_path, fs::metadata(file_path).unwrap()) {
+                if Shredder::run_file_shredding(
+                    configuration,
+                    file_path,
+                    fs::metadata(file_path).unwrap(),
+                ) {
                     files_count = files_count + 1;
                 }
             }
@@ -158,7 +169,9 @@ impl <'a>Shredder<'a> {
         io::stdout().flush().unwrap();
 
         let mut input = String::new();
-        io::stdin().read_line(&mut input).expect("Failed to read input.");
+        io::stdin()
+            .read_line(&mut input)
+            .expect("Failed to read input.");
         let input = input.trim();
 
         if input.len() != 1 || !input.to_lowercase().eq("y") {
@@ -225,7 +238,11 @@ impl<'a> Display for ShredConfiguration<'a> {
         writeln!(f, "{}", format!("Verbosity: {}", self.verbosity))?;
         writeln!(f, "{}", format!("Is recursive: {}", self.is_recursive))?;
         writeln!(f, "{}", format!("Is interactive: {}", self.is_interactive))?;
-        writeln!(f, "{}", format!("Rewrite iterations: {}", self.rewrite_iterations))?;
+        writeln!(
+            f,
+            "{}",
+            format!("Rewrite iterations: {}", self.rewrite_iterations)
+        )?;
         writeln!(f, "{}", format!("Keep files: {}", self.keep_files))?;
         writeln!(f, "{}", format!("Path: {}", self.raw_path))?;
 
@@ -273,18 +290,10 @@ impl PartialEq for Verbosity {
 impl Display for Verbosity {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         let string_value = match self {
-            Verbosity::None => {
-                "None"
-            }
-            Verbosity::Low => {
-                "Low"
-            }
-            Verbosity::Average => {
-                "Average"
-            }
-            Verbosity::High => {
-                "High"
-            }
+            Verbosity::None => "None",
+            Verbosity::Low => "Low",
+            Verbosity::Average => "Average",
+            Verbosity::High => "High",
         };
         write!(f, "{}", string_value)?;
         Ok(())

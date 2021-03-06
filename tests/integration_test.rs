@@ -57,21 +57,19 @@ fn shredding_with_file_deletion() {
 #[test]
 #[timeout(10000)]
 fn shredding_directory_recursively() {
-    let env_details = common::setup(common::TestDataType::MultipleFiles(
-        vec![
-            String::from("test3/subdir1/1.txt"),
-            String::from("test3/subdir1/2.txt"),
-            String::from("test3/subdir1/3.txt"),
-            String::from("test3/subdir1/subdir11/1.txt"),
-            String::from("test3/subdir1/subdir11/2.txt"),
-            String::from("test3/subdir2/subdir1/111.txt"),
-            String::from("test3/subdir3/1231.txt"),
-            String::from("test3/subdir3/1222.txt"),
-            String::from("test3/subdir3/1286.txt"),
-            String::from("test3/subdir3/1286/anotherdir/abs.txt"),
-            String::from("test3/subdir3/1286/anotherdir/abc.txt"),
-        ]
-    ));
+    let env_details = common::setup(common::TestDataType::MultipleFiles(vec![
+        String::from("test3/subdir1/1.txt"),
+        String::from("test3/subdir1/2.txt"),
+        String::from("test3/subdir1/3.txt"),
+        String::from("test3/subdir1/subdir11/1.txt"),
+        String::from("test3/subdir1/subdir11/2.txt"),
+        String::from("test3/subdir2/subdir1/111.txt"),
+        String::from("test3/subdir3/1231.txt"),
+        String::from("test3/subdir3/1222.txt"),
+        String::from("test3/subdir3/1286.txt"),
+        String::from("test3/subdir3/1286/anotherdir/abs.txt"),
+        String::from("test3/subdir3/1286/anotherdir/abc.txt"),
+    ]));
 
     match &env_details {
         common::EnvironmentDetails::Single(_) => {

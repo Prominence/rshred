@@ -26,7 +26,10 @@ pub fn setup(data_type: TestDataType) -> EnvironmentDetails {
             EnvironmentDetails::single(tmp_file_path)
         }
         TestDataType::MultipleFiles(files) => {
-            let files = files.iter().map(|file| format!("{}/{}", TEST_DIR, file)).collect::<Vec<String>>();
+            let files = files
+                .iter()
+                .map(|file| format!("{}/{}", TEST_DIR, file))
+                .collect::<Vec<String>>();
             for file in files.iter() {
                 let path = std::path::Path::new(&file);
                 let directory = path.parent().unwrap();
@@ -65,13 +68,11 @@ pub fn cleanup(env_details: EnvironmentDetails) {
                 std::fs::remove_file(&filename).unwrap();
             }
         }
-        EnvironmentDetails::Multiple(files) => {
-            files.iter().for_each(|file| {
-                if std::path::Path::new(file).exists() {
-                    std::fs::remove_file(file).unwrap();
-                }
-            })
-        }
+        EnvironmentDetails::Multiple(files) => files.iter().for_each(|file| {
+            if std::path::Path::new(file).exists() {
+                std::fs::remove_file(file).unwrap();
+            }
+        }),
     }
 }
 
