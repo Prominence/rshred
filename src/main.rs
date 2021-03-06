@@ -43,6 +43,7 @@ fn main() {
         .arg(
             Arg::with_name("n")
                 .short("n")
+                .takes_value(true)
                 .help("How many times the file must be overridden"),
         )
         .get_matches();

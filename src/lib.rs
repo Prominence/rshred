@@ -7,6 +7,7 @@ use std::process::exit;
 
 use indicatif::{ProgressBar, ProgressStyle};
 use std::fmt::{Display, Formatter, Result};
+use std::path::Path;
 use walkdir::WalkDir;
 
 const BATCH_SIZE: usize = 8192;
@@ -47,6 +48,7 @@ impl<'a> Shredder<'a> {
         } else {
             if self.configuration.is_recursive {
                 Shredder::run_directory_shredding(&configuration, &configuration.raw_path);
+                fs::remove_dir_all(Path::new(&configuration.raw_path)).unwrap();
             } else {
                 println!("Target is a directory!");
                 exit(1);
@@ -79,14 +81,12 @@ impl<'a> Shredder<'a> {
                         }
 
                         println!("{}", absolute_path);
-                        for iteration in 0..configuration.rewrite_iterations {
-                            <Shredder<'a>>::shred_file(
-                                &file,
-                                file_length,
-                                absolute_path,
-                                &iteration,
-                            );
-                        }
+                        <Shredder<'a>>::shred_file(
+                            &file,
+                            file_length,
+                            absolute_path,
+                            &configuration.rewrite_iterations,
+                        );
 
                         if !configuration.keep_files {
                             fs::remove_file(absolute_path).unwrap();
@@ -109,37 +109,39 @@ impl<'a> Shredder<'a> {
         };
     }
 
-    fn shred_file(file: &File, file_length: u64, absolute_path: &str, iteration: &u8) {
+    fn shred_file(file: &File, file_length: u64, absolute_path: &str, iterations: &u8) {
         let mut buffer = BufWriter::new(file);
 
-        let mut bytes_processed = 0;
-
         let pb = ProgressBar::new(file_length);
-        pb.set_prefix(&format!("Iteration #{}", iteration + 1));
         pb.set_message(absolute_path);
         pb.set_style(ProgressStyle::default_bar()
             .template("{prefix} {spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} {bytes_per_sec} ({eta})")
             .progress_chars("#>-"));
 
-        while bytes_processed < file_length {
-            let bytes_to_write = if file_length - bytes_processed > BATCH_SIZE as u64 {
-                BATCH_SIZE
-            } else {
-                (file_length - bytes_processed) as usize
-            };
+        for i in 0..*iterations {
+            pb.set_prefix(&format!("Iteration {}/{}", i + 1, *iterations));
+            let mut bytes_processed = 0;
+            while bytes_processed < file_length {
+                let bytes_to_write = if file_length - bytes_processed > BATCH_SIZE as u64 {
+                    BATCH_SIZE
+                } else {
+                    (file_length - bytes_processed) as usize
+                };
 
-            let random_bytes: Vec<u8> = (0..bytes_to_write).map(|_| rand::random::<u8>()).collect();
-            buffer.write(&random_bytes).unwrap();
+                let random_bytes: Vec<u8> =
+                    (0..bytes_to_write).map(|_| rand::random::<u8>()).collect();
+                buffer.write(&random_bytes).unwrap();
 
-            bytes_processed = bytes_processed + bytes_to_write as u64;
+                bytes_processed = bytes_processed + bytes_to_write as u64;
 
-            pb.set_position(bytes_processed);
+                pb.set_position(bytes_processed);
+            }
+            pb.finish_with_message("shredded");
+
+            buffer.flush().unwrap();
+            file.sync_all().unwrap();
+            buffer.seek(SeekFrom::Start(0)).unwrap();
         }
-        pb.finish_with_message("shredded");
-
-        buffer.flush().unwrap();
-        file.sync_all().unwrap();
-        buffer.seek(SeekFrom::Start(0)).unwrap();
     }
 
     fn run_directory_shredding(configuration: &ShredConfiguration, relative_path: &str) {
