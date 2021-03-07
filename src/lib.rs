@@ -85,7 +85,7 @@ impl<'a> Shredder<'a> {
                             &file,
                             file_length,
                             absolute_path,
-                            &configuration.rewrite_iterations,
+                            configuration.rewrite_iterations,
                         );
 
                         if !configuration.keep_files {
@@ -109,7 +109,7 @@ impl<'a> Shredder<'a> {
         };
     }
 
-    fn shred_file(file: &File, file_length: u64, absolute_path: &str, iterations: &u8) {
+    fn shred_file(file: &File, file_length: u64, absolute_path: &str, iterations: u8) {
         let mut buffer = BufWriter::new(file);
 
         let pb = ProgressBar::new(file_length);
@@ -118,8 +118,8 @@ impl<'a> Shredder<'a> {
             .template("{prefix} {spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} {bytes_per_sec} ({eta})")
             .progress_chars("#>-"));
 
-        for i in 0..*iterations {
-            pb.set_prefix(&format!("Iteration {}/{}", i + 1, *iterations));
+        for i in 0..iterations {
+            pb.set_prefix(&format!("Iteration {}/{}", i + 1, iterations));
             let mut bytes_processed = 0;
             while bytes_processed < file_length {
                 let bytes_to_write = if file_length - bytes_processed > BATCH_SIZE as u64 {
@@ -279,7 +279,7 @@ impl Ord for Verbosity {
 
 impl PartialOrd for Verbosity {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.discriminant().cmp(&other.discriminant()))
+        Some(self.cmp(other))
     }
 }
 
